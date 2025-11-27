@@ -723,10 +723,10 @@ async function retryLeadingWhitespace(originalPath, translatedPath) {
  */
 async function translateFromFilesJson(filesJsonPath = 'json/ggfh/files.json', oldBasePath = null, useAi = true) {
     try {
+        console.log(filesJsonPath, oldBasePath, useAi)
         // files.json 읽기
         const filesData = await sFiles.readJson(filesJsonPath);
         const { baseFolder, files } = filesData.content;
-
         const results = {
             total: 0,
             success: 0,

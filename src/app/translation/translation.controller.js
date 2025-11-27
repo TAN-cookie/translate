@@ -206,7 +206,8 @@ router.route('/local/folder/read')
 router.route('/local/folder/translate')
     .post(async (req, res) => {
         try {
-            const { filesJsonPath = 'json/ggfh/files.json', oldBasePath = null, useAi = true } = req.body;
+            const body = req.body || {};
+            const { filesJsonPath = 'json/ggfh/files.json', oldBasePath = null, useAi = true } = body;
 
             console.log(`📂 files.json 기반 번역 시작: ${filesJsonPath}`);
 
