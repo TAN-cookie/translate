@@ -581,7 +581,7 @@ async function translateCompareBatch({ newJsonPath, oldJsonPath = null, idKey = 
 
             // 이미 번역된 항목은 건너뜀
             if (checkGlossary(source)) {
-                console.log(`🔖용어집 일치: "${source}" → "${glossary.find(g => g.original === source).translated}"`);
+                // console.log(`🔖용어집 일치: "${source}" → "${glossary.find(g => g.original === source).translated}"`);
                 out.push({ ...item, [targetKey]: glossary.find(g => g.original === source).translated, translated: true });
                 continue;
             }
