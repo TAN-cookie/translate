@@ -1,0 +1,10 @@
+/.env
+/.gitattributes
+/.github
+/ecosystem.config.js
+/js-genai-main
+/node_modules
+/public
+/regex
+/src - 복사본
+/trash
