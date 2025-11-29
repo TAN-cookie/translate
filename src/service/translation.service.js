@@ -4,11 +4,21 @@ const fs = require('fs')
 const crypto = require('crypto')
 const path = require('path'); // 목적: 경로 안전 처리
 
+// const ai = new GoogleGenAI({
+//     apiKey: process.env.GEMINI_API_KEY_PROCTA411,
+//     model: 'gemini-3-pro-preview'
+// })
+
+/**
+ * google vertex AI client 설정
+ */
 
 const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY_PROCTA411,
-    model: 'gemini-3-pro-preview'
-})
+    vertexai: true,
+    // apiKey: process.env.GEMINI_VERTEX_API_KEY_PROCTA411,
+    project: process.env.GEMINI_VERTEX_PROJECT_PROCTA411,
+    location: 'us-central1',
+});
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY; // Using DI Pattern to inject secret
 
@@ -59,6 +69,39 @@ function updateGlossary(original, translated, human, ai) {
         console.error('Glossary update error:', error);
     }
 }
+
+// 목적: glossary에서 translated가 null인 항목에 ai 값을 복사
+function fillNullTranslatedFromAi(glossaryPath = 'json/ggfh/glossary.json') {
+    try {
+        const fullPath = path.join(__dirname, '../../../', glossaryPath);
+        const raw = fs.readFileSync(fullPath, 'utf8');
+        const data = JSON.parse(raw);
+
+        let count = 0;
+        const updated = data.map(item => {
+            if (item.translated === null && item.ai) {
+                count++;
+                console.log(`✅ [${count}] translated null → ai 복사: "${item.original?.slice(0, 30)}..."`);
+                return { ...item, translated: item.ai };
+            }
+            return item;
+        });
+
+        if (count > 0) {
+            fs.writeFileSync(fullPath, JSON.stringify(updated, null, 2), 'utf8');
+            console.log(`\n📊 총 ${count}개 항목의 translated를 ai 값으로 채웠습니다.`);
+        } else {
+            console.log('ℹ️ translated가 null인 항목이 없습니다.');
+        }
+
+        return { success: true, count };
+    } catch (error) {
+        console.error('fillNullTranslatedFromAi 오류:', error);
+        return { success: false, error: error.message };
+    }
+}
+// 실행: 
+// fillNullTranslatedFromAi()
 
 async function translateFileUpload(path, filename, desc, mimeType) {
     try {
@@ -143,7 +186,7 @@ function replaceInTranslation(originalWord, translatedWord, newTranslatedWord) {
     fs.writeFileSync('../json/ggfh/glossary.json', JSON.stringify(updatedArray, null, 2), 'utf8');
     return updatedArray;
 }
-replaceInTranslation('玉足', '옥족에', '발에')
+// replaceInTranslation('玉足', '옥족에', '발에')
 
 /**
  * 원문과 이전에 번역된 내용 비교
@@ -189,14 +232,24 @@ function addLeadingWhitespace(originalText, translatedText) {
 }
 
 // Using Strategy Pattern for safe AI text extraction
+// 목적: Gemini 응답에서 텍스트 파트만 추출 (thoughtSignature 등 비텍스트 파트 무시)
 function extractTextFromResponse(resp) {
     if (!resp) return '';
-    if (typeof resp.text === 'string' && resp.text.trim()) return resp.text.trim();
+
+    // candidates에서 직접 텍스트 파트만 추출 (경고 메시지 방지)
     const parts = resp.candidates?.[0]?.content?.parts;
     if (Array.isArray(parts)) {
-        const s = parts.map(p => p?.text).filter(Boolean).join('').trim();
-        if (s) return s;
+        const textParts = parts
+            .filter(p => p?.text !== undefined) // 텍스트 파트만 필터링
+            .map(p => p.text)
+            .join('')
+            .trim();
+        if (textParts) return textParts;
     }
+
+    // fallback: resp.text 사용 (경고 발생 가능)
+    if (typeof resp.text === 'string' && resp.text.trim()) return resp.text.trim();
+
     return '';
 }
 
@@ -466,6 +519,7 @@ async function translateAiCandidate(source, systemInstruction, safetySettings = 
             // 안전성 필터 완화 (필요 시)
             safetySettings,
         });
+
         const text = extractTextFromResponse(resp);
         return { text: text || null, success: !!text };
 
@@ -543,7 +597,8 @@ ${aiCandidate}`;
 
 
 // Using Async/Await + Error Handling Patterns for batch comparison
-async function translateCompareBatch({ newJsonPath, oldJsonPath = null, idKey = 'id', textKey = 'dialogue', addKey, useAi = true }) {
+async function translateCompareBatch({ newJsonPath, oldJsonPath = null, idKey = 'id', textKey = 'dialogue', addKey, useAi = true, translated = false }) {
+    console.log(`비교 번역 시작: newJsonPath=${newJsonPath}, oldJsonPath=${oldJsonPath}, idKey=${idKey}, textKey=${textKey}, addKey=${addKey}, useAi=${useAi}`);
     const glossary = loadGlossary();
     const checkGlossary = createGlossaryChecker(glossary);
     const systemInstruction = buildComparativeSystemInstruction(glossary);
@@ -574,9 +629,9 @@ async function translateCompareBatch({ newJsonPath, oldJsonPath = null, idKey = 
     for (const item of newData.content) {
         const source = item?.[textKey] ?? '';
         const targetText = !source.includes('drama') && !source.includes('role') && !source.includes('task') && source != "0" ? source : '';
-
-        if (targetText != '' && !item.translated) {
-
+        if (targetText != ''
+            // && !item.translated
+        ) {
             if (!source) { out.push({ ...item, translated: false }); continue; }
 
             // 이미 번역된 항목은 건너뜀
@@ -737,7 +792,6 @@ async function translateFromFilesJson(filesJsonPath = 'json/ggfh/files.json', ol
 
         console.log(`📂 번역 시작: ${files.length}개 파일`);
         console.log(`📁 기본 폴더: ${baseFolder}`);
-
         for (const fileEntry of files) {
             const { path: relativePath, textKeys, addKey } = fileEntry;
             const fullPath = `${baseFolder}/${relativePath}`;
@@ -745,24 +799,42 @@ async function translateFromFilesJson(filesJsonPath = 'json/ggfh/files.json', ol
             // oldJsonPath 계산 (oldBasePath가 있는 경우)
             const oldJsonPath = oldBasePath ? `${oldBasePath}/${relativePath}` : null;
 
+            // 번역 결과가 저장되는 경로 (두 번째 textKey부터 이 파일을 입력으로 사용)
+            const translatedPath = `decrypt/translated/Mod_심진기2.4.4/ModExcel/${relativePath}`;
+
             console.log(`\n📄 파일: ${relativePath}`);
             console.log(`   textKeys: ${textKeys.join(', ')}`);
 
-            // 각 textKey에 대해 순차적으로 번역
+            // 각 textKey에 대해 순차적으로 번역 (플래그로 첫 번째 여부 판별)
+            let isFirstKey = true;
             for (const textKey of textKeys) {
                 results.total++;
 
                 try {
-                    console.log(`   🔄 번역 중: ${textKey}${addKey ? ` → ${addKey}` : ''}`);
+                    // 첫 번째 textKey는 원본 파일, 이후는 이전 번역 결과 파일 사용
+                    let inputPath = fullPath;
+                    if (!isFirstKey) {
+                        try {
+                            // console.log(`   🔍 이전 번역 결과 파일 확인: ${translatedPath}`);
+                            inputPath = translatedPath;
+                            await sFiles.readJson(translatedPath);
+                            console.log(`   📁 이전 번역 결과 파일 사용: ${translatedPath}`);
+                        } catch {
+                            console.log(`   ⚠️ 번역된 파일 없음, 원본 사용: ${fullPath}`);
+                        }
+                    }
+                    // console.log(`   🔄 번역 중: ${textKey}${addKey ? ` → ${addKey}` : ''}`);
 
                     const translateResult = await translateCompareBatch({
-                        newJsonPath: fullPath,
+                        newJsonPath: inputPath,
                         oldJsonPath: oldJsonPath,
                         idKey: 'id',
                         textKey: textKey,
                         addKey: addKey || null,
                         useAi: useAi
                     });
+
+                    isFirstKey = false; // 첫 번째 키 처리 완료
 
                     results.success++;
                     results.details.push({
@@ -796,11 +868,22 @@ async function translateFromFilesJson(filesJsonPath = 'json/ggfh/files.json', ol
     }
 }
 
+
+// newJsonPath=decrypt/translated/Mod_심진기2.4.4/ModExcel/patch_all/DramaDialogue.json, oldJsonPath=lagacy/Mod_심진기2.0.0/ModExcel/patch_all/DramaDialogue.json, idKey=id, textKey=dialogue, addKey=null, useAi=true
+// translateCompareBatch({
+//     newJsonPath: 'decrypt/translated/Mod_심진기2.4.4/ModExcel/patch_all/DramaDialogue.json',
+//     oldJsonPath: 'lagacy/Mod_심진기2.0.0/ModExcel/patch_all/DramaDialogue.json',
+//     idKey: 'id',
+//     textKey: 'dialogue',
+//     addKey: null,
+//     useAi: true
+// })
 module.exports = {
     translateFileUpload,
     translateCompareBatch,
     completeTranslation,
     retryLeadingWhitespace,
     completeTranslationFolders,
-    translateFromFilesJson
+    translateFromFilesJson,
+    fillNullTranslatedFromAi
 }

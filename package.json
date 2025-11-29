@@ -18,7 +18,7 @@
   "license": "ISC",
   "description": "게임 번역 및 파일 암호화/복호화 서버",
   "dependencies": {
-    "@google/genai": "^1.13.0",
+    "@google/genai": "^1.30.0",
     "axios": "^1.11.0",
     "cors": "^2.8.5",
     "crypto-js": "^4.2.0",
