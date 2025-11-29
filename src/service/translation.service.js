@@ -3,22 +3,12 @@ const sFiles = require('./files.service');
 const fs = require('fs')
 const crypto = require('crypto')
 const path = require('path'); // 목적: 경로 안전 처리
-
-// const ai = new GoogleGenAI({
-//     apiKey: process.env.GEMINI_API_KEY_PROCTA411,
-//     model: 'gemini-3-pro-preview'
-// })
-
-/**
- * google vertex AI client 설정
- */
+const delay = ms => new Promise(res => setTimeout(res, ms));
 
 const ai = new GoogleGenAI({
-    vertexai: true,
-    // apiKey: process.env.GEMINI_VERTEX_API_KEY_PROCTA411,
-    project: process.env.GEMINI_VERTEX_PROJECT_PROCTA411,
-    location: 'us-central1',
-});
+    apiKey: process.env.GEMINI_API_KEY_PROCTA412,
+    model: 'gemini-3-pro-preview'
+})
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY; // Using DI Pattern to inject secret
 
@@ -102,6 +92,58 @@ function fillNullTranslatedFromAi(glossaryPath = 'json/ggfh/glossary.json') {
 }
 // 실행: 
 // fillNullTranslatedFromAi()
+
+/**
+ * 목적: glossary 정리 - translated가 있는 항목에서 human/ai 필드 제거 후 original 기준 정렬
+ * @param {string} glossaryPath - glossary.json 경로
+ * @param {boolean} sortByOriginal - original 기준 정렬 여부 (기본: true)
+ */
+function cleanupGlossary(glossaryPath = 'json/ggfh/glossary.json', sortByOriginal = true) {
+    try {
+        const fullPath = path.join(__dirname, '../../../', glossaryPath);
+        const raw = fs.readFileSync(fullPath, 'utf8');
+        const data = JSON.parse(raw);
+
+        let cleanedCount = 0;
+        let skippedCount = 0;
+
+        const cleaned = data.map(item => {
+            // translated가 있으면 human/ai 제거
+            if (item.translated) {
+                const { human, ai, ...rest } = item;
+                if (human !== undefined || ai !== undefined) {
+                    cleanedCount++;
+                    console.log(`🧹 [${cleanedCount}] 정리: "${item.original?.slice(0, 30)}..." (human/ai 제거)`);
+                }
+                return rest; // { original, translated }만 반환
+            } else {
+                // translated가 없으면 건너뜀 (아직 번역 미완료)
+                skippedCount++;
+                console.warn(`⏭️ 건너뜀: "${item.original?.slice(0, 30)}..." (translated 없음)`);
+                return item;
+            }
+        });
+
+        // 정렬 (optional)
+        const sorted = sortByOriginal
+            ? cleaned.sort((a, b) => (a.original || '').localeCompare(b.original || '', 'zh'))
+            : cleaned;
+
+        fs.writeFileSync(fullPath, JSON.stringify(sorted, null, 2), 'utf8');
+
+        console.log(`\n📊 Glossary 정리 완료:`);
+        console.log(`   정리됨: ${cleanedCount}개 (human/ai 제거)`);
+        console.log(`   건너뜀: ${skippedCount}개 (translated 없음)`);
+        console.log(`   총 항목: ${sorted.length}개`);
+
+        return { success: true, cleanedCount, skippedCount, total: sorted.length };
+    } catch (error) {
+        console.error('cleanupGlossary 오류:', error);
+        return { success: false, error: error.message };
+    }
+}
+// 실행: 
+// cleanupGlossary()
 
 async function translateFileUpload(path, filename, desc, mimeType) {
     try {
@@ -503,6 +545,7 @@ ${aiCandidate}`;
 // Using Strategy Pattern for AI candidate translation
 async function translateAiCandidate(source, systemInstruction, safetySettings = [{ category: 'HARM_CATEGORY_SEXUAL', threshold: 'BLOCK_NONE' }], model = 'gemini-3-pro-preview') {
     try {
+        console.log(source)
         let cached = null;
         try { cached = await ensureSystemInstructionCache(systemInstruction, model); } catch { }
         const resp = await ai.models.generateContent({
@@ -598,7 +641,7 @@ ${aiCandidate}`;
 
 // Using Async/Await + Error Handling Patterns for batch comparison
 async function translateCompareBatch({ newJsonPath, oldJsonPath = null, idKey = 'id', textKey = 'dialogue', addKey, useAi = true, translated = false }) {
-    console.log(`비교 번역 시작: newJsonPath=${newJsonPath}, oldJsonPath=${oldJsonPath}, idKey=${idKey}, textKey=${textKey}, addKey=${addKey}, useAi=${useAi}`);
+    // console.log(`비교 번역 시작: newJsonPath=${newJsonPath}, oldJsonPath=${oldJsonPath}, idKey=${idKey}, textKey=${textKey}, addKey=${addKey}, useAi=${useAi}`);
     const glossary = loadGlossary();
     const checkGlossary = createGlossaryChecker(glossary);
     const systemInstruction = buildComparativeSystemInstruction(glossary);
@@ -667,6 +710,8 @@ async function translateCompareBatch({ newJsonPath, oldJsonPath = null, idKey = 
             let chosen = null;
             // 인간이 번역한 내용이 존재할 경우 혹은 한글이 있는 경우
             if (human != null && human != '' && /[가-힣]/.test(human)) {
+                // 60초 대기
+                await delay(60000);
                 console.log('심판 진행 중...');
                 // 2) 심판으로 선택
                 chosen = await judgeAndSelect({ source, human, aiCandidate: leadingWhitespaceText, systemInstruction, safetySettings });
@@ -885,5 +930,6 @@ module.exports = {
     retryLeadingWhitespace,
     completeTranslationFolders,
     translateFromFilesJson,
-    fillNullTranslatedFromAi
+    fillNullTranslatedFromAi,
+    cleanupGlossary
 }
