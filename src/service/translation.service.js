@@ -6,7 +6,7 @@ const path = require('path'); // 목적: 경로 안전 처리
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
 const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY_PROCTA412,
+    apiKey: process.env.GEMINI_API_KEY_PROCTA411,
     model: 'gemini-3-pro-preview'
 })
 
@@ -339,7 +339,7 @@ async function listSystemInstructionCache(deleteList = false) {
     return getCached.pageLength > 0 ? getCached.page : null;
 }
 
-// listSystemInstructionCache()
+listSystemInstructionCache(true)
 // glossary 포함 systemInstruction을 캐시에 저장하고 name 반환
 async function ensureSystemInstructionCache(systemInstruction, model = 'gemini-3-pro-preview') {
     const ttlSec = 60 * 60 * 24; // 1 day
@@ -409,6 +409,10 @@ function buildComparativeSystemInstruction(glossary) {
     // ${JSON.stringify(glossary)}`;
     return `ROLE You are a professional zh→ko game/localization translator (ko-KR only). OBJECTIVE Given Source (Chinese) and Baseline (Korean, optional), output the BEST final Korean line.
 
+GAME CONTEXT
+    Genre: Xianxia/Wuxia, Cultivation/Simulation, Open-World RPG, Hack & Slash
+    Setting: Chinese martial arts and cultivation fantasy world with training and progression systems
+
 ORDER OF OPERATIONS
 
     GLOSSARY CHECK: Identify glossary terms. Translate them exactly as defined in the glossary.
@@ -433,7 +437,7 @@ RUBRIC (priority)
 
     Accuracy: Correct meaning transfer.
 
-    Style: Natural Polite style (해요체) for UI/System, unless context implies otherwise.
+    Style: Natural Polite style (해요체) for UI/System, unless context implies otherwise. Use appropriate Xianxia/Wuxia terminology for in-game narratives.
 
 HARD RULES
 
@@ -500,24 +504,31 @@ async function openAITranslateCandidate(source, systemInstruction) {
 // Using Strategy Pattern for judge fallback to OpenAI (JSON 요청)
 async function openAIJudgeAndSelect({ source, human, aiCandidate, systemInstruction }) {
     try {
-        const userPrompt = `You will choose the BEST final Korean line between:
-- Baseline (human): may be empty
-- AI-CANDIDATE
+        const userPrompt = `You are a judge for zh→ko game localization (Xianxia/Wuxia, Cultivation RPG).
 
-Constraints:
-- Apply GLOSSARY strictly
-- Preserve formatting and whitespace
-- 1 line in → 1 line out
+Task: Choose the BEST Korean translation between Baseline and AI-CANDIDATE.
+
+Evaluation Criteria (priority order):
+1. Glossary Compliance: Exact term usage from glossary
+2. Grammar (Josa): Correct Korean particles based on Batchim
+3. Formatting: Preserve ALL tags, placeholders, whitespace exactly
+4. Accuracy: Faithful meaning transfer
+5. Fluency: Natural Korean game dialogue style
+
+Rules:
+- If Baseline is accurate, fluent, and has no errors → select Baseline
+- If Baseline has errors, awkward phrasing, or glossary violations → select AI-CANDIDATE
+- Preserve 1:1 line alignment
 
 Return ONLY JSON:
-{"final":"<the best single-line Korean text>"}
+{"final":"<selected Korean text>"}
 
 Input:
 <Source>
 ${source}
 
 <Baseline>
-${human ?? '없음'}
+${human ?? 'N/A'}
 
 <AI-CANDIDATE>
 ${aiCandidate}`;
@@ -583,24 +594,31 @@ async function translateAiCandidate(source, systemInstruction, safetySettings = 
 // Using Strategy Pattern for model-based judgment (JSON enforced)
 async function judgeAndSelect({ source, human, aiCandidate, systemInstruction, safetySettings = [{ category: 'HARM_CATEGORY_SEXUAL', threshold: 'BLOCK_NONE' }], model = 'gemini-3-pro-preview' }) {
     // Gemini로 시도
-    const judgePrompt = `You will choose the BEST final Korean line between:
-- Baseline (human): may be empty
-- AI-CANDIDATE
+    const judgePrompt = `You are a judge for zh→ko game localization (Xianxia/Wuxia, Cultivation RPG).
 
-Constraints:
-- Apply GLOSSARY strictly
-- Preserve formatting and whitespace
-- 1 line in → 1 line out
+Task: Choose the BEST Korean translation between Baseline and AI-CANDIDATE.
+
+Evaluation Criteria (priority order):
+1. Glossary Compliance: Exact term usage from glossary
+2. Grammar (Josa): Correct Korean particles based on Batchim
+3. Formatting: Preserve ALL tags, placeholders, whitespace exactly
+4. Accuracy: Faithful meaning transfer
+5. Fluency: Natural Korean game dialogue style
+
+Rules:
+- If Baseline is accurate, fluent, and has no errors → select Baseline
+- If Baseline has errors, awkward phrasing, or glossary violations → select AI-CANDIDATE
+- Preserve 1:1 line alignment
 
 Return ONLY JSON:
-{"final":"<the best single-line Korean text>"}
+{"final":"<selected Korean text>"}
 
 Input:
 <Source>
 ${source}
 
 <Baseline>
-${human ?? '없음'}
+${human ?? 'N/A'}
 
 <AI-CANDIDATE>
 ${aiCandidate}`;
@@ -710,8 +728,8 @@ async function translateCompareBatch({ newJsonPath, oldJsonPath = null, idKey = 
             let chosen = null;
             // 인간이 번역한 내용이 존재할 경우 혹은 한글이 있는 경우
             if (human != null && human != '' && /[가-힣]/.test(human)) {
-                // 60초 대기
-                await delay(60000);
+                // 30초 대기
+                await delay(30000);
                 console.log('심판 진행 중...');
                 // 2) 심판으로 선택
                 chosen = await judgeAndSelect({ source, human, aiCandidate: leadingWhitespaceText, systemInstruction, safetySettings });
