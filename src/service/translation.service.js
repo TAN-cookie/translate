@@ -6,8 +6,8 @@ const path = require('path'); // 목적: 경로 안전 처리
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
 const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY_PROCTA411,
-    model: 'gemini-3-pro-preview'
+    apiKey: process.env.GEMINI_API_KEY_PROCTA412,
+    model: 'gemini-2.5-pro'
 })
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY; // Using DI Pattern to inject secret
@@ -143,6 +143,7 @@ function cleanupGlossary(glossaryPath = 'json/ggfh/glossary.json', sortByOrigina
     }
 }
 // 실행: 
+// fillNullTranslatedFromAi()
 // cleanupGlossary()
 
 async function translateFileUpload(path, filename, desc, mimeType) {
@@ -205,7 +206,7 @@ async function completeTranslationFolders(path) {
         console.error('폴더 번역 오류:', e);
     }
 }
-// completeTranslationFolders('decrypt/translated/Mod_심진기2.4.4/ModExcel')
+// completeTranslationFolders('decrypt/Mod_탄양지체1.2.2/ModExcel')
 // const testFile = require('../../trash/test.json');
 // console.log(JSON.stringify(testFile))
 
@@ -341,7 +342,7 @@ async function listSystemInstructionCache(deleteList = false) {
 
 listSystemInstructionCache(true)
 // glossary 포함 systemInstruction을 캐시에 저장하고 name 반환
-async function ensureSystemInstructionCache(systemInstruction, model = 'gemini-3-pro-preview') {
+async function ensureSystemInstructionCache(systemInstruction, model = 'gemini-2.5-pro') {
     const ttlSec = 60 * 60 * 24; // 1 day
     const now = Date.now();
     const hash = crypto.createHash('sha256').update(String(systemInstruction || '')).digest('hex').slice(0, 16);
@@ -554,7 +555,7 @@ ${aiCandidate}`;
 }
 
 // Using Strategy Pattern for AI candidate translation
-async function translateAiCandidate(source, systemInstruction, safetySettings = [{ category: 'HARM_CATEGORY_SEXUAL', threshold: 'BLOCK_NONE' }], model = 'gemini-3-pro-preview') {
+async function translateAiCandidate(source, systemInstruction, safetySettings = [{ category: 'HARM_CATEGORY_SEXUAL', threshold: 'BLOCK_NONE' }], model = 'gemini-2.5-pro') {
     try {
         console.log(source)
         let cached = null;
@@ -592,7 +593,7 @@ async function translateAiCandidate(source, systemInstruction, safetySettings = 
 }
 
 // Using Strategy Pattern for model-based judgment (JSON enforced)
-async function judgeAndSelect({ source, human, aiCandidate, systemInstruction, safetySettings = [{ category: 'HARM_CATEGORY_SEXUAL', threshold: 'BLOCK_NONE' }], model = 'gemini-3-pro-preview' }) {
+async function judgeAndSelect({ source, human, aiCandidate, systemInstruction, safetySettings = [{ category: 'HARM_CATEGORY_SEXUAL', threshold: 'BLOCK_NONE' }], model = 'gemini-2.5-pro' }) {
     // Gemini로 시도
     const judgePrompt = `You are a judge for zh→ko game localization (Xianxia/Wuxia, Cultivation RPG).
 
@@ -831,7 +832,6 @@ async function retryLeadingWhitespace(originalPath, translatedPath) {
 }
 
 // console.log(retryLeadingWhitespace('decrypt/Mod_심진기2.4.4/ModExcel/patch_item/LocalText.json', 'decrypt/translated/Mod_심진기2.4.4/ModExcel/patch_item/LocalText.json'));
-
 /**
  * files.json을 읽어서 각 파일의 textKeys를 순차적으로 번역
  * @param {string} filesJsonPath - files.json 경로 (기본: json/ggfh/files.json)
@@ -863,7 +863,8 @@ async function translateFromFilesJson(filesJsonPath = 'json/ggfh/files.json', ol
             const oldJsonPath = oldBasePath ? `${oldBasePath}/${relativePath}` : null;
 
             // 번역 결과가 저장되는 경로 (두 번째 textKey부터 이 파일을 입력으로 사용)
-            const translatedPath = `decrypt/translated/Mod_심진기2.4.4/ModExcel/${relativePath}`;
+            // const translatedPath = `decrypt/translated/Mod_탄양지체1.2.2/ModExcel/${relativePath}`;
+            // const translatedPath = `decrypt/translated/Mod_심진기2.4.4/ModAssets/ModExt/${relativePath}`;
 
             console.log(`\n📄 파일: ${relativePath}`);
             console.log(`   textKeys: ${textKeys.join(', ')}`);
