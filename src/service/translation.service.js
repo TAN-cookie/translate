@@ -6,8 +6,8 @@ const path = require('path'); // 목적: 경로 안전 처리
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
 const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY_PROCTA412,
-    model: 'gemini-2.5-pro'
+    apiKey: process.env.GEMINI_API_KEY_PROCTA412_PROJECT2,
+    model: 'gemini-3-pro-preview'
 })
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY; // Using DI Pattern to inject secret
@@ -342,7 +342,7 @@ async function listSystemInstructionCache(deleteList = false) {
 
 listSystemInstructionCache(true)
 // glossary 포함 systemInstruction을 캐시에 저장하고 name 반환
-async function ensureSystemInstructionCache(systemInstruction, model = 'gemini-2.5-pro') {
+async function ensureSystemInstructionCache(systemInstruction, model = 'gemini-3-pro-preview') {
     const ttlSec = 60 * 60 * 24; // 1 day
     const now = Date.now();
     const hash = crypto.createHash('sha256').update(String(systemInstruction || '')).digest('hex').slice(0, 16);
@@ -555,7 +555,7 @@ ${aiCandidate}`;
 }
 
 // Using Strategy Pattern for AI candidate translation
-async function translateAiCandidate(source, systemInstruction, safetySettings = [{ category: 'HARM_CATEGORY_SEXUAL', threshold: 'BLOCK_NONE' }], model = 'gemini-2.5-pro') {
+async function translateAiCandidate(source, systemInstruction, safetySettings = [{ category: 'HARM_CATEGORY_SEXUAL', threshold: 'BLOCK_NONE' }], model = 'gemini-3-pro-preview') {
     try {
         console.log(source)
         let cached = null;
@@ -593,7 +593,7 @@ async function translateAiCandidate(source, systemInstruction, safetySettings = 
 }
 
 // Using Strategy Pattern for model-based judgment (JSON enforced)
-async function judgeAndSelect({ source, human, aiCandidate, systemInstruction, safetySettings = [{ category: 'HARM_CATEGORY_SEXUAL', threshold: 'BLOCK_NONE' }], model = 'gemini-2.5-pro' }) {
+async function judgeAndSelect({ source, human, aiCandidate, systemInstruction, safetySettings = [{ category: 'HARM_CATEGORY_SEXUAL', threshold: 'BLOCK_NONE' }], model = 'gemini-3-pro-preview' }) {
     // Gemini로 시도
     const judgePrompt = `You are a judge for zh→ko game localization (Xianxia/Wuxia, Cultivation RPG).
 
@@ -690,7 +690,7 @@ async function translateCompareBatch({ newJsonPath, oldJsonPath = null, idKey = 
     const out = [];
     for (const item of newData.content) {
         const source = item?.[textKey] ?? '';
-        const targetText = !source.includes('drama') && !source.includes('role') && !source.includes('task') && source != "0" ? source : '';
+        const targetText = !source.includes('drama') && !source.includes('role') && !source.includes('task') && source != "0" && source.trim() !== "" ? source : '';
         if (targetText != ''
             // && !item.translated
         ) {
@@ -862,9 +862,8 @@ async function translateFromFilesJson(filesJsonPath = 'json/ggfh/files.json', ol
             // oldJsonPath 계산 (oldBasePath가 있는 경우)
             const oldJsonPath = oldBasePath ? `${oldBasePath}/${relativePath}` : null;
 
-            // 번역 결과가 저장되는 경로 (두 번째 textKey부터 이 파일을 입력으로 사용)
-            // const translatedPath = `decrypt/translated/Mod_탄양지체1.2.2/ModExcel/${relativePath}`;
-            // const translatedPath = `decrypt/translated/Mod_심진기2.4.4/ModAssets/ModExt/${relativePath}`;
+            // 번역 결과가 저장되는 경로 (두 번째 textKey부터 이 파일을 입력으로 사용) baseFolder는 /의 [0]부분만 자르고 나머지 경로를 합쳐서 사용
+            const translatedPath = `decrypt/translated/${baseFolder.split('/').slice(1).join('/')}/${relativePath}`;
 
             console.log(`\n📄 파일: ${relativePath}`);
             console.log(`   textKeys: ${textKeys.join(', ')}`);
